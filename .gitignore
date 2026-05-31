@@ -6,9 +6,6 @@
 bin/
 out/
 
-pos-app
-multitenant-pos
-
 *.test
 
 *.prof
