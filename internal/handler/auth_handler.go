@@ -91,6 +91,11 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid Request Method", http.StatusMethodNotAllowed)
+		return
+	}
+
 	username := r.FormValue("username")
 
 	var user model.User

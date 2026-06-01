@@ -2,7 +2,9 @@ package handler
 
 import (
 	"fmt"
+	"multitenant-pos/configs"
 	"multitenant-pos/internal/middleware"
+	"multitenant-pos/internal/model"
 	"net/http"
 )
 
@@ -14,8 +16,10 @@ func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
 
 	username := r.FormValue("username")
 
-	user, ok := Users[username]
-	if !ok {
+	var user model.User
+	result := configs.DB.First(&user, "username = ?", username)
+
+	if result.Error != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
