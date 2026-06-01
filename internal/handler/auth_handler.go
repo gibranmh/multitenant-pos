@@ -2,19 +2,15 @@ package handler
 
 import (
 	"fmt"
+	"multitenant-pos/configs"
 	"multitenant-pos/internal/middleware"
+	"multitenant-pos/internal/model"
 	"multitenant-pos/internal/utils"
 	"net/http"
 	"time"
 )
 
-type Login struct {
-	HashedPassword string
-	SessionToken   string
-	CSRFToken      string
-}
-
-var Users = map[string]Login{}
+var Users = map[string]model.User{}
 
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -30,14 +26,19 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := Users[username]; ok {
-		http.Error(w, "Username already exists", http.StatusConflict)
-		return
+	hashedPassword, _ := utils.HashPassword(password)
+	user := model.User{
+		Username:     username,
+		Password:     hashedPassword,
+		SessionToken: "",
+		CSRFToken:    "",
 	}
 
-	hashedPassword, _ := utils.HashPassword(password)
-	Users[username] = Login{
-		HashedPassword: hashedPassword,
+	result := configs.DB.Create(&user)
+
+	if result.Error != nil {
+		http.Error(w, "Gagal menyimpan user ke database: "+result.Error.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	fmt.Fprintln(w, "User registered successfully")
@@ -52,8 +53,15 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
-	user, ok := Users[username]
-	if !ok || !utils.CheckPasswordHash(password, user.HashedPassword) {
+	var user model.User
+	result := configs.DB.First(&user, "username = ?", username)
+
+	if result.Error != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	if !utils.CheckPasswordHash(password, user.Password) {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -77,15 +85,17 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	user.SessionToken = sessionToken
 	user.CSRFToken = csrfToken
-	Users[username] = user
+	configs.DB.Save(&user)
 
 	fmt.Fprintln(w, "User logged in successfully")
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
-	user, ok := Users[username]
-	if !ok {
+
+	var user model.User
+	result := configs.DB.First(&user, "username = ?", username)
+	if result.Error != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -111,7 +121,8 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	user.SessionToken = ""
 	user.CSRFToken = ""
-	Users[username] = user
+
+	configs.DB.Save(&user)
 
 	fmt.Fprintln(w, "User logged out successfully")
 }
