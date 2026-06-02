@@ -2,32 +2,25 @@ package handler
 
 import (
 	"fmt"
-	"multitenant-pos/configs"
 	"multitenant-pos/internal/middleware"
-	"multitenant-pos/internal/model"
 	"net/http"
 )
 
 func ProtectedHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow GET method
 	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid Request Method", http.StatusMethodNotAllowed)
+		sendJSONResponse(w, http.StatusMethodNotAllowed, false, "Invalid Method")
 		return
 	}
 
-	username := r.FormValue("username")
-
-	var user model.User
-	result := configs.DB.First(&user, "username = ?", username)
-
-	if result.Error != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Authorize the request using JWT token
+	claimsData, err := middleware.Authorize(r)
+	if err != nil {
+		sendJSONResponse(w, http.StatusUnauthorized, false, "Unauthorized: "+err.Error())
 		return
 	}
 
-	if err := middleware.Authorize(r, user.SessionToken, user.CSRFToken); err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	fmt.Fprintf(w, "Validation Successful! Welcome to the protected area, %s!", username)
+	// If authorization is successful, return protected data
+	message := fmt.Sprintf("Validation Successful! Your User ID: %d, Your Tenant ID: %s", claimsData.UserID, claimsData.TenantID)
+	sendJSONResponse(w, http.StatusOK, true, message)
 }
